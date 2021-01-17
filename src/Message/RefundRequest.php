@@ -10,6 +10,9 @@ use SquareConnect;
  */
 class RefundRequest extends AbstractRequest
 {
+    protected $liveEndpoint = 'https://connect.squareup.com';
+    protected $testEndpoint = 'https://connect.squareupsandbox.com';
+
     public function getAccessToken()
     {
         return $this->getParameter('accessToken');
@@ -70,34 +73,41 @@ class RefundRequest extends AbstractRequest
         return $this->setParameter('reason', $value);
     }
 
+    public function getEndpoint()
+    {
+        return $this->getTestMode() === true ? $this->testEndpoint : $this->liveEndpoint;
+    }
+
+    private function getApiInstance()
+    {
+        $api_config = new \SquareConnect\Configuration();
+        $api_config->setHost($this->getEndpoint());
+        $api_config->setAccessToken($this->getAccessToken());
+        $api_client = new \SquareConnect\ApiClient($api_config);
+
+        return new \SquareConnect\Api\RefundsApi($api_client);
+    }
+
     public function getData()
     {
-        $data = [];
+        $amountMoney = new \SquareConnect\Model\Money();
+        $amountMoney->setAmount($this->getAmountInteger());
+        $amountMoney->setCurrency($this->getCurrency());
 
-        $data['idempotency_key'] = uniqid();
-        $data['payment_id'] = $this->getTransactionId();
-        $data['reason'] = $this->getReason();
-        $data['amount_money'] = [
-            'amount' => $this->getAmountInteger(),
-            'currency' => $this->getCurrency()
-        ];
+        $data = new \SquareConnect\Model\RefundPaymentRequest();
+        $data->setPaymentId($this->getTransactionId());
+        $data->setIdempotencyKey($this->getIdempotencyKey());
+        $data->setReason($this->getReason());
+        $data->setAmountMoney($amountMoney);
 
         return $data;
     }
 
     public function sendData($data)
     {
-        $defaultApiConfig = new \SquareConnect\Configuration();
-        $defaultApiConfig->setAccessToken($this->getAccessToken());
-
-        if($this->getParameter('testMode')) {
-            $defaultApiConfig->setHost("https://connect.squareupsandbox.com");
-        }
-
-        $defaultApiClient = new \SquareConnect\ApiClient($defaultApiConfig);
-        $api_instance = new SquareConnect\Api\RefundsApi($defaultApiClient);
-
         try {
+            $api_instance = $this->getApiInstance();
+
             $result = $api_instance->refundPayment($data);
 
             if ($error = $result->getErrors()) {
@@ -110,7 +120,9 @@ class RefundRequest extends AbstractRequest
                 $response = [
                     'status' => $result->getRefund()->getStatus(),
                     'id' => $result->getRefund()->getId(),
+                    'location_id' => $result->getRefund()->getLocationId(),
                     'transaction_id' => $result->getRefund()->getPaymentId(),
+                    'tender_id' => $result->getRefund()->getOrderid(),
                     'created_at' => $result->getRefund()->getCreatedAt(),
                     'reason' => $result->getRefund()->getReason(),
                     'amount' => $result->getRefund()->getAmountMoney()->getAmount(),
@@ -120,12 +132,12 @@ class RefundRequest extends AbstractRequest
                 if (!empty($processing_fee)) {
                     $response['processing_fee'] = $processing_fee->getAmount();
                 }
-
             }
         } catch (\Exception $e) {
             $response = [
                 'status' => 'error',
-                'detail' => 'Exception when creating refund: ' . $e->getMessage()
+                'detail' => 'Exception when creating refund: ' . $e->getMessage(),
+                'errors' => method_exists($e, 'getResponseBody') ? $e->getResponseBody()->errors : []
             ];
         }
 

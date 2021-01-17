@@ -10,6 +10,9 @@ use SquareConnect;
  */
 class ChargeRequest extends AbstractRequest
 {
+    protected $liveEndpoint = 'https://connect.squareup.com';
+    protected $testEndpoint = 'https://connect.squareupsandbox.com';
+
     public function getAccessToken()
     {
         return $this->getParameter('accessToken');
@@ -121,42 +124,43 @@ class ChargeRequest extends AbstractRequest
         return $this->setParameter('note', $value);
     }
 
+    public function getEndpoint()
+    {
+        return $this->getTestMode() === true ? $this->testEndpoint : $this->liveEndpoint;
+    }
+
+    private function getApiInstance()
+    {
+        $api_config = new \SquareConnect\Configuration();
+        $api_config->setHost($this->getEndpoint());
+        $api_config->setAccessToken($this->getAccessToken());
+        $api_client = new \SquareConnect\ApiClient($api_config);
+
+        return new \SquareConnect\Api\PaymentsApi($api_client);
+    }
+
     public function getData()
     {
-        $data = [];
+        $amountMoney = new \SquareConnect\Model\Money();
+        $amountMoney->setAmount($this->getAmountInteger());
+        $amountMoney->setCurrency($this->getCurrency());
 
-        $data['idempotency_key'] = $this->getIdempotencyKey();
-        $data['amount_money'] = [
-            'amount' => $this->getAmountInteger(),
-            'currency' => $this->getCurrency()
-        ];
-        $data['location_id'] = $this->getLocationId();
-        $data['source_id'] = $this->getNonce();
-        $data['customer_id'] = $this->getCustomerReference();
-        $data['customer_card_id'] = $this->getCustomerCardId();
-        $data['reference_id'] = $this->getReferenceId();
-        $data['order_id'] = $this->getOrderId();
-        $data['note'] = $this->getNote();
+        $data = new SquareConnect\Model\CreatePaymentRequest();
+        $data->setSourceId($this->getNonce() ?? $this->getCustomerCardId());
+        $data->setCustomerId($this->getCustomerReference());
+        $data->setIdempotencyKey($this->getIdempotencyKey());
+        $data->setAmountMoney($amountMoney);
+        $data->setLocationId($this->getLocationId());
+        $data->setNote($this->getNote());
 
         return $data;
     }
 
     public function sendData($data)
     {
-        $defaultApiConfig = new \SquareConnect\Configuration();
-        $defaultApiConfig->setAccessToken($this->getAccessToken());
-
-        if($this->getParameter('testMode')) {
-            $defaultApiConfig->setHost("https://connect.squareupsandbox.com");
-        }
-
-        $defaultApiClient = new \SquareConnect\ApiClient($defaultApiConfig);
-
-        $api_instance = new SquareConnect\Api\PaymentsApi($defaultApiClient);
-
-        $tenders = [];
-
         try {
+            $api_instance = $this->getApiInstance();
+
             $result = $api_instance->createPayment($data);
 
             if ($error = $result->getErrors()) {
@@ -175,11 +179,9 @@ class ChargeRequest extends AbstractRequest
                 ];
             }
         } catch (\Exception $e) {
-            $error = $e->getResponseBody()->errors[0]->detail ?? $e->getMessage();
-
             $response = [
                 'status' => 'error',
-                'detail' => 'Exception when creating transaction: ' . $error
+                'detail' => 'Exception when creating transaction: ' . $e->getMessage()
             ];
         }
 

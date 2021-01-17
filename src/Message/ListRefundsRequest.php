@@ -89,23 +89,17 @@ class ListRefundsRequest extends AbstractRequest
 
     public function sendData()
     {
-        $defaultApiConfig = new \SquareConnect\Configuration();
-        $defaultApiConfig->setAccessToken($this->getAccessToken());
+        SquareConnect\Configuration::getDefaultConfiguration()->setAccessToken($this->getAccessToken());
 
-        if($this->getParameter('testMode')) {
-            $defaultApiConfig->setHost("https://connect.squareupsandbox.com");
-        }
-
-        $defaultApiClient = new \SquareConnect\ApiClient($defaultApiConfig);
-        $api_instance = new SquareConnect\Api\RefundsApi($defaultApiClient);
+        $api_instance = new SquareConnect\Api\TransactionsApi();
 
         try {
-            $result = $api_instance->listPaymentRefunds(
+            $result = $api_instance->listRefunds(
+                $this->getLocationId(),
                 $this->getBeginTime(),
                 $this->getEndTime(),
                 $this->getSortOrder(),
-                $this->getCursor(),
-                $this->getLocationId()
+                $this->getCursor()
             );
 
             if ($error = $result->getErrors()) {
@@ -123,8 +117,9 @@ class ListRefundsRequest extends AbstractRequest
                 foreach ($refundItems as $refund) {
                     $item = new \stdClass();
                     $item->id = $refund->getId();
+                    $item->tenderId = $refund->getTenderId();
                     $item->locationId = $refund->getLocationId();
-                    $item->transactionId = $refund->getPaymentId();
+                    $item->transactionId = $refund->getTransactionId();
                     $item->createdAt = $refund->getCreatedAt();
                     $item->reason = $refund->getReason();
                     $item->status = $refund->getStatus();
@@ -142,7 +137,7 @@ class ListRefundsRequest extends AbstractRequest
         } catch (\Exception $e) {
             $response = [
                 'status' => 'error',
-                'detail' => 'Exception when calling TransactionsApi->listRefunds: ', $e->getMessage()
+                'detail' => 'Exception when calling TransactionsApi->listRefunds: ' . $e->getMessage()
             ];
         }
 

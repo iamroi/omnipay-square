@@ -89,24 +89,17 @@ class ListTransactionsRequest extends AbstractRequest
 
     public function sendData()
     {
-        $defaultApiConfig = new \SquareConnect\Configuration();
-        $defaultApiConfig->setAccessToken($this->getAccessToken());
+        SquareConnect\Configuration::getDefaultConfiguration()->setAccessToken($this->getAccessToken());
 
-        if($this->getParameter('testMode')) {
-            $defaultApiConfig->setHost("https://connect.squareupsandbox.com");
-        }
-
-        $defaultApiClient = new \SquareConnect\ApiClient($defaultApiConfig);
-
-        $api_instance = new SquareConnect\Api\PaymentsApi($defaultApiClient);
+        $api_instance = new SquareConnect\Api\TransactionsApi();
 
         try {
             $result = $api_instance->listTransactions(
+                $this->getLocationId(),
                 $this->getBeginTime(),
                 $this->getEndTime(),
                 $this->getSortOrder(),
-                $this->getCursor(),
-                $this->getLocationId()
+                $this->getCursor()
             );
 
             if ($error = $result->getErrors()) {
@@ -194,7 +187,7 @@ class ListTransactionsRequest extends AbstractRequest
         } catch (\Exception $e) {
             $response = [
                 'status' => 'error',
-                'detail' => 'Exception when calling TransactionsApi->listTransactions: ', $e->getMessage()
+                'detail' => 'Exception when calling TransactionsApi->listTransactions: ' . $e->getMessage()
             ];
         }
 
